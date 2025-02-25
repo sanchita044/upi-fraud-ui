@@ -1,83 +1,86 @@
-import './App.css';
-import Box from '@mui/material/Box';
-import { TextField, Button, Container, Typography } from '@mui/material';
-import Grid from '@mui/material/Grid';
-import { DemoContainer } from '@mui/x-date-pickers/internals/demo';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { predictUpiFraud } from './service/data';
-import { useState, useEffect } from 'react';
-import image from './hero-bg.jpg';
+import "./App.css";
+import Box from "@mui/material/Box";
+import { TextField, Button, Container, Typography } from "@mui/material";
+import Grid from "@mui/material/Grid";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { predictUpiFraud } from "./service/data";
+import { useState } from "react";
+import image from "./hero-bg.jpg";
+import dayjs from "dayjs";
 
 function App() {
-  const [prediction, setPrediction] = useState('');
+  const [prediction, setPrediction] = useState("");
   const [upiData, setUpiData] = useState({
-    transDay: '',
-    transMonth: '',
-    transYear: '',
-    upiNumber: '',
-    transAmount: '',
+    transDay: "",
+    transMonth: "",
+    transYear: "",
+    upiNumber: "",
+    transAmount: "",
   });
 
-  useEffect(() => {}, [upiData]);
-
-  const handleChange = (event, property) => {
-    setUpiData({ ...upiData, [property]: event.target.value });
-  };
+  const [errors, setErrors] = useState({ transDay: "", upiNumber: "", transAmount: "" });
 
   const getDate = (event) => {
-    const dateObj = new Date(event.$d);
-    const year = new Intl.DateTimeFormat('en', { year: 'numeric' }).format(dateObj);
-    const month = new Intl.DateTimeFormat('en', { month: '2-digit' }).format(dateObj);
-    const day = new Intl.DateTimeFormat('en', { day: '2-digit' }).format(dateObj);
-    setUpiData((prevState) => ({
-      ...prevState,
-      transDay: day,
-      transMonth: month,
-      transYear: year,
+    if (!event) {
+      setErrors((prev) => ({ ...prev, transDay: "Date is required." }));
+      return;
+    }
+    const selectedDate = dayjs(event);
+    if (selectedDate.isAfter(dayjs(), "day")) {
+      setErrors((prev) => ({ ...prev, transDay: "Future dates are not allowed." }));
+      return;
+    }
+    setErrors((prev) => ({ ...prev, transDay: "" }));
+    setUpiData((prev) => ({
+      ...prev,
+      transDay: selectedDate.format("DD"),
+      transMonth: selectedDate.format("MM"),
+      transYear: selectedDate.format("YYYY"),
     }));
+  };
+
+  const handleChange = (event, property) => {
+    const { value } = event.target;
+    setUpiData((prev) => ({ ...prev, [property]: value }));
+    validateField(property, value);
+  };
+
+  const validateField = (field, value) => {
+    let errorMsg = "";
+    if (field === "upiNumber") {
+      if (!value) errorMsg = "UPI Number is required.";
+      else if (!/^[0-9]{10}$/.test(value)) errorMsg = "UPI Number must be 10 digits.";
+    }
+    if (field === "transAmount") {
+      if (!value) errorMsg = "Transaction Amount is required.";
+      else if (isNaN(value) || parseFloat(value) <= 0) errorMsg = "Amount must be greater than 0.";
+    }
+    setErrors((prevErrors) => ({ ...prevErrors, [field]: errorMsg }));
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    const data = {
-      transDay: upiData.transDay,
-      transMonth: upiData.transMonth,
-      transYear: upiData.transYear,
-      upiNumber: upiData.upiNumber,
-      transAmount: upiData.transAmount,
-    };
-    predictUpiFraud(data).then((resp) => {
-      console.log(resp);
-      setPrediction(resp);
-    });
+    validateField("upiNumber", upiData.upiNumber);
+    validateField("transAmount", upiData.transAmount);
+    if (!upiData.transDay) setErrors((prev) => ({ ...prev, transDay: "Date is required." }));
+    if (Object.values(errors).some((error) => error)) return;
+    predictUpiFraud(upiData).then((resp) => setPrediction(resp));
   };
 
   return (
     <Container
       style={{
         backgroundImage: `url(${image})`,
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center',
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        backgroundSize: "cover",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      <Box
-        className="form-container"
-        style={{
-          background: 'rgba(255, 255, 255, 0.9)',
-          borderRadius: '8px',
-          padding: '2rem',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          maxWidth: '500px',
-          width: '100%',
-        }}
-      >
+      <Box className="form-container" style={{ background: "rgba(255,255,255,0.9)", borderRadius: "8px", padding: "2rem" }}>
         <Typography variant="h4" gutterBottom>
           UPI Fraud Detection
         </Typography>
@@ -85,40 +88,36 @@ function App() {
           <Grid container spacing={3}>
             <Grid item xs={12}>
               <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DemoContainer components={['DatePicker']}>
-                  <DatePicker
-                    name="date"
-                    id="date"
-                    label="Transaction Date"
-                    onChange={(e) => getDate(e)}
-                  />
-                </DemoContainer>
+                <DatePicker
+                  label="Transaction Date"
+                  onChange={(e) => getDate(e)}
+                  disableFuture
+                  slotProps={{ textField: { error: !!errors.transDay, helperText: errors.transDay, fullWidth: true } }}
+                />
               </LocalizationProvider>
             </Grid>
             <Grid item xs={12}>
               <TextField
-                variant="outlined"
-                required
                 fullWidth
                 name="upiNumber"
                 label="UPI Number"
                 type="number"
-                id="upiNumber"
-                onChange={(e) => handleChange(e, 'upiNumber')}
                 value={upiData.upiNumber}
+                onChange={(e) => handleChange(e, "upiNumber")}
+                error={!!errors.upiNumber}
+                helperText={errors.upiNumber}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                variant="outlined"
-                required
                 fullWidth
                 name="transAmount"
                 label="Transaction Amount"
-                id="transAmount"
                 type="number"
-                onChange={(e) => handleChange(e, 'transAmount')}
                 value={upiData.transAmount}
+                onChange={(e) => handleChange(e, "transAmount")}
+                error={!!errors.transAmount}
+                helperText={errors.transAmount}
               />
             </Grid>
             <Grid item xs={12}>
@@ -128,11 +127,10 @@ function App() {
             </Grid>
           </Grid>
         </form>
-        <br />
         {prediction && (
-          <Box className="prediction-result">
+          <Box className="prediction-result" mt={2}>
             <Typography variant="h6">Prediction Result:</Typography>
-            <Typography variant="body1">{prediction}</Typography>
+            <Typography>{prediction}</Typography>
           </Box>
         )}
       </Box>
